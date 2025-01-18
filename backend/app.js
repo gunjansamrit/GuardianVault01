@@ -14,8 +14,7 @@ const port = process.env.PORT;
 app.use(express.json());
 
 app.use('/', userRouter);
-// app.use('/admin', adminRouter);
-// app.use('/company', companyRouter);
+
 // app.use(errlogger);
 
 app.listen(port, () => {console.log(`Server started on port ${port}!`)});

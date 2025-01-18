@@ -11,7 +11,7 @@ const {
 const CredentialModel = require("./credentialModel");
 const DataItemModel = require("./dataItemModel");
 const {encrypt} = require("../utils/encryption");
-const VaultModel = require("./vaultModel")
+const {VaultModel} = require("./vaultModel")
 
 const userSchema = new mongoose.Schema({
   credential_id: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
 //signup
 userSchema.statics.signup = async function (req, res) {
     const userData = req.body;
-    const key = "your-encryption-key"; 
+    const key = process.env.ENCRYPTION_KEY; 
   
     try {
       const hashedPassword = await generatePasswordHash(req.body.password);

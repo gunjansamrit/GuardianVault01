@@ -2,7 +2,7 @@ const db=require('../dbConnections')
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 const {encrypt} = require("../utils/encryption");
-const VaultModel = require("./vaultModel")
+const {VaultModel} = require("./vaultModel")
 
 const dataItemMasterSchema = new mongoose.Schema({
     item_type: { 
@@ -54,7 +54,7 @@ const dataItemMasterSchema = new mongoose.Schema({
   
     try {
      
-      const key = 'your-encryption-key'; 
+      const key = process.env.ENCRYPTION_KEY; 
       const encryptedValue = encrypt(item_value, key);
   
      
