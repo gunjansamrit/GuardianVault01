@@ -25,30 +25,30 @@ const dataItemMasterSchema = new mongoose.Schema({
  
 
   dataItemMasterSchema.statics.getItemsByUserId = async (req, res, next) => {
-    const { userId } = req.params; // Extract the userId from request params
+    const { userId } = req.params; 
     
     try {
-      // Fetch the user document
+      
       const  UserModel = require("./userModel")
       const user = await UserModel.findOne({ _id: userId });
       if (!user) {
         return res.status(404).send('User not found');
       }
   
-      // Retrieve the encrypted user key
+      
       const encryptedUserKey = user.key;
       if (!encryptedUserKey) {
         return res.status(400).send('User encryption key not found');
       }
   
-      // Decrypt the user key using the master key from environment variables
+      
       const masterKey = process.env.ENCRYPTION_KEY;
       const decryptedUserKey = decrypt(encryptedUserKey, masterKey);
   
-      // Fetch all data items associated with the user
+  
       const items = await DataItemModel.find(
         { item_owner_id: userId },
-        'item_type item_name _id' // Select necessary fields only
+        'item_type item_name _id' 
       );
   
       if (items.length === 0) {
@@ -57,22 +57,22 @@ const dataItemMasterSchema = new mongoose.Schema({
   
       const updatedItems = [];
   
-      // Iterate over the items to fetch and decrypt vault data
+      
       for (let item of items) {
-        // Encrypt the item ID with the decrypted user key
+       
         const encryptedItemId = encrypt(item._id.toString(), decryptedUserKey);
   
-        // Fetch the corresponding vault data
+        
         const vaultData = await VaultModel.findOne({ encrypted_item_id: encryptedItemId });
         if (!vaultData) {
           console.log(`Vault data not found for item_id: ${item._id}`);
           continue;
         }
   
-        // Decrypt the item value using the decrypted user key
+       
         const decryptedItemValue = decrypt(vaultData.encrypted_item_value, decryptedUserKey);
   
-        // Add the decrypted item to the result list
+       
         updatedItems.push({
           item_id: item._id,
           item_value: decryptedItemValue,
@@ -81,7 +81,7 @@ const dataItemMasterSchema = new mongoose.Schema({
         });
       }
   
-      // Check if any items were successfully decrypted
+     
       if (updatedItems.length === 0) {
         return res.status(404).send('No items found in vault or decryption failed');
       }
@@ -97,7 +97,7 @@ const dataItemMasterSchema = new mongoose.Schema({
 
   //addItems
 
-  dataItemMasterSchema.statics.addItem = async (req, res) => {
+   dataItemMasterSchema.statics.addItem = async (req, res) => {
     const { userId } = req.params; 
     const { item_name, item_value } = req.body; 
   
@@ -106,26 +106,39 @@ const dataItemMasterSchema = new mongoose.Schema({
     }
   
     try {
-     
-      const key = process.env.ENCRYPTION_KEY; 
-      const encryptedValue = encrypt(item_value, key);
+      
+      const  UserModel = require("./userModel")
+      const user = await UserModel.findOne({ _id: userId });
+      if (!user) {
+        return res.status(404).send('User not found');
+      }
   
-     
-      const dataItem = new DataItemModel({
-        item_name,
-        item_owner_id: userId, 
-      });
-  
-   
-      const savedItem = await dataItem.save();
+      const encryptedUserKey = user.key; 
+      if (!encryptedUserKey) {
+        return res.status(400).send('User encryption key not found');
+      }
   
       
-      await VaultModel.create({
-        encrypted_item_id: encrypt(savedItem._id.toString(), key),
-        encrypted_item_value: encryptedValue,
+      const masterKey = process.env.ENCRYPTION_KEY;
+      const decryptedUserKey = decrypt(encryptedUserKey, masterKey);  
+  
+      
+      const encryptedValue = encrypt(item_value, decryptedUserKey); 
+  
+      
+      const dataItem = new DataItemModel({
+        item_name,
+        item_owner_id: userId,  
       });
   
-
+      const savedItem = await dataItem.save();
+  
+     
+      await VaultModel.create({
+        encrypted_item_id: encrypt(savedItem._id.toString(), decryptedUserKey), 
+        encrypted_item_value: encryptedValue, 
+      });
+  
       return res.status(201).json({
         message: 'Item added successfully',
         item_id: savedItem._id,
@@ -136,6 +149,7 @@ const dataItemMasterSchema = new mongoose.Schema({
       return res.status(500).send('An error occurred while adding the item');
     }
   };
+  
 
   const DataItemModel = mongoose.model("DataItem", dataItemMasterSchema);
   module.exports = DataItemModel;
