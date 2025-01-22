@@ -14,24 +14,31 @@ const {encrypt} = require("../utils/encryption");
 const {VaultModel} = require("./vaultModel")
 
 const userSchema = new mongoose.Schema({
-  credential_id: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
-  first_name: { type: String, required: true },
-  middle_name: { type: String },
-  last_name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  mobile_no: { type: String, required: true },
-  age: { type: Number, required: true },
-  date_of_birth: { type: Date, required: true },
-  data_items: [{ type: mongoose.Schema.Types.ObjectId, ref: "DataItem" }],
-});
+    credential_id: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
+    first_name: { type: String, required: true },
+    middle_name: { type: String },
+    last_name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    mobile_no: { type: String, required: true },
+    key: { type: String, required: true, immutable: true }, 
+    data_items: [{ type: mongoose.Schema.Types.ObjectId, ref: "DataItem" }],
+  });
+  
 
 
 //signup
 userSchema.statics.signup = async function (req, res) {
     const userData = req.body;
-    const key = process.env.ENCRYPTION_KEY; 
+    const masterKey = process.env.ENCRYPTION_KEY; 
   
     try {
+      
+      const userKey = userData.key;
+      if (!userKey) {
+        return res.status(400).send("Encryption key is required");
+      }
+  
+     
       const hashedPassword = await generatePasswordHash(req.body.password);
   
       const credentialsData = {
@@ -39,19 +46,25 @@ userSchema.statics.signup = async function (req, res) {
         password: hashedPassword,
       };
   
+     
       const existingCredentials = await CredentialModel.findOne({ username: credentialsData.username });
       if (existingCredentials) {
         return res.status(400).send("Username already exists");
       }
   
+      
       const existingUser = await UserModel.findOne({ email: userData.email });
-
       if (existingUser) {
         return res.status(400).send("Email already exists");
       }
   
+      
       const credentials = await CredentialModel.create(credentialsData);
   
+     
+      const encryptedUserKey = encrypt(userKey, masterKey);
+  
+     
       const newUser = await UserModel.create({
         credential_id: credentials._id,
         first_name: userData.first_name,
@@ -59,10 +72,10 @@ userSchema.statics.signup = async function (req, res) {
         last_name: userData.last_name,
         email: userData.email,
         mobile_no: userData.mobile_no,
-        age: userData.age,
-        date_of_birth: userData.date_of_birth,
+        key: encryptedUserKey, 
       });
   
+     
       const dataItems = [
         { type: "email", value: userData.email },
         { type: "mobile_no", value: userData.mobile_no },
@@ -72,8 +85,9 @@ userSchema.statics.signup = async function (req, res) {
   
       const savedDataItems = [];
   
+    
       for (const item of dataItems) {
-        const encryptedValue = encrypt(item.value, key);
+        const encryptedValue = encrypt(item.value, userKey); 
   
         const dataItem = new DataItemModel({
           item_name: item.type,
@@ -81,16 +95,16 @@ userSchema.statics.signup = async function (req, res) {
         });
   
         const savedItem = await dataItem.save();
-  
         savedDataItems.push(savedItem._id);
   
-        
+      
         await VaultModel.create({
-          encrypted_item_id: encrypt(savedItem._id.toString(), key),
+          encrypted_item_id: encrypt(savedItem._id.toString(), userKey), 
           encrypted_item_value: encryptedValue,
         });
       }
   
+      
       newUser.data_items = savedDataItems;
       await newUser.save();
   
@@ -100,9 +114,10 @@ userSchema.statics.signup = async function (req, res) {
       return res.status(500).send("An error occurred during registration");
     }
   };
+  
 
 
-  //getALLUser
+  
   userSchema.statics.getAllUsers = async function (req, res) {
     try {
       
