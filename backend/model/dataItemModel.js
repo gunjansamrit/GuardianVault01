@@ -153,7 +153,7 @@ const dataItemMasterSchema = new mongoose.Schema({
   //getMetadata BY userID
   dataItemMasterSchema.statics.getItemMetaDetailsByUser = async (req, res) => {
     const { userId } = req.params; 
-    console.log(userId);
+
     try {
         const items = await DataItemModel.find({ item_owner_id: userId }, {});
         return res.status(200).json(items);
