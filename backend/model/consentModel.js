@@ -5,6 +5,7 @@ const { VaultModel, retrieveFromVault } = require("./vaultModel");
 const DataItemModel = require("./dataItemModel");
 
 const { encrypt, decrypt } = require("../utils/encryption");
+const ConsentHistoryModel = require("./consentHistoryModel");
 
 const consentSchema = new mongoose.Schema({
   item_id: {
@@ -49,127 +50,150 @@ const consentSchema = new mongoose.Schema({
   },
 });
 
-//requestAccess
-consentSchema.statics.requestAccess = async function (req, res, next) {
-  const { seeker_id } = req.params;
-  const { item_id, provider_id } = req.body;
-
-  try {
-    const newConsent = await ConsentModel.create({
-      item_id,
-      seeker_id,
-      provider_id,
-      validity_period: Date.MAX_VALUE,
-      access_count: 1,
-    });
-
-    // Return the newly created consent request
-    return res.status(201).json(newConsent);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).send("An error occurred while requesting access");
-  }
-};
 
 //provideConsent
 consentSchema.statics.giveConsent = async function (req, res, next) {
-  const { item_id, seeker_id, provider_id, consent } = req.body;
-
-  try {
-    const consentRequest = await ConsentModel.findOne({
-      item_id,
-      seeker_id,
-      provider_id,
-    });
-
-    if (!consentRequest) {
-      return res.status(404).send("Consent request not found");
+    const { consent_id, consent, count, validity } = req.body;
+  
+    try {
+      
+      const consentRequest = await ConsentModel.findById(consent_id);
+  
+      if (!consentRequest) {
+        return res.status(404).send("Consent request not found");
+      }
+  
+      const { item_id, seeker_id, provider_id } = consentRequest;
+  
+      
+      const updatedStatus = consent.toLowerCase() === "yes" ? "approved" : "rejected";
+  
+      
+      consentRequest.status = updatedStatus;
+  
+      
+      if (updatedStatus === "approved") {
+        if (count !== undefined) {
+          consentRequest.count = count; 
+        }
+        if (validity !== undefined) {
+          consentRequest.validity = validity; 
+        }
+      }
+  
+      await consentRequest.save();
+  
+      
+      await ConsentHistoryModel.create({
+        consent_id: consentRequest._id,
+        action: updatedStatus,
+        timestamp: new Date(),
+        additional_info: `Count: ${count || "N/A"}, Validity: ${validity || "N/A"}`,
+      });
+  
+      return res.status(200).json({
+        message: `Consent has been ${updatedStatus}`,
+        consentRequest,
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send("An error occurred while processing the consent");
     }
+  };
 
-    const updatedStatus =
-      consent.toLowerCase() === "yes" ? "approved" : "rejected";
 
-    consentRequest.status = updatedStatus;
-    await consentRequest.save();
 
-    return res.status(200).json({
-      message: `Consent has been ${updatedStatus}`,
-      consentRequest,
-    });
-  } catch (error) {
-    console.error(error);
-    return res
-      .status(500)
-      .send("An error occurred while processing the consent");
-  }
-};
-
-//AccessItems
+  //AccessItems
 
 consentSchema.statics.accessItem = async (req, res) => {
-  const { item_id, provider_id } = req.body;
-  const { seeker } = req.params;
-
-  const key = process.env.ENCRYPTION_KEY;
+    const { item_id } = req.body; 
+    const { seeker } = req.params; 
   
+    const key = process.env.ENCRYPTION_KEY; 
+  
+    try {
+      
+      const dataItem = await DataItemModel.findById(item_id);
+      if (!dataItem) {
+        return res.status(404).send("Item not found in the data master.");
+      }
+  
+      const provider_id = dataItem.item_owner_id; 
+  
+      
+      let consent = await ConsentModel.findOne({
+        item_id,
+        seeker_id: seeker,
+        provider_id,
+      });
 
-  try {
-    const consent = await ConsentModel.findOne({
-      item_id: item_id,
-      provider_id: provider_id,
-      seeker_id: seeker,
-      status: "approved",
-    });
 
-    if (!consent) {
-      return res.status(403).send("Access denied or consent not found.");
+      const ConsentHistoryModel = require("./consentHistoryModel");
+      if (consent && consent.status === "approved") {
+        if (consent.access_count > 0 && new Date() <= consent.validity_period) {
+         
+          consent.access_count -= 1;
+          await consent.save();
+  
+         
+          const encryptedItemId = encrypt(item_id, key);
+          const vaultData = await VaultModel.findOne({
+            encrypted_item_id: encryptedItemId,
+          });
+  
+          if (!vaultData) {
+            return res.status(404).send("Item not found in the vault.");
+          }
+  
+          const decryptedData = decrypt(vaultData.encrypted_item_value, key);
+  
+          
+
+          await ConsentHistoryModel.create({
+            consent_id: consent._id,
+            status: "accessed",
+            accessed_at: new Date(),
+          });
+  
+          
+          return res.status(200).json({
+            item_name: dataItem.item_name,
+            item_value: decryptedData,
+          });
+        } else {
+          return res.status(403).send("Consent expired or access count exhausted.");
+        }
+      } else {
+        
+        const newConsent = await ConsentModel.create({
+          item_id,
+          seeker_id: seeker,
+          provider_id,
+          validity_period: Date.MAX_VALUE,
+          access_count: 1,
+          status: "pending", 
+        });
+  
+        
+        await ConsentHistoryModel.create({
+          consent_id: newConsent._id,
+          status: "requested",
+          requested_at: new Date(),
+        });
+  
+        
+        return res.status(202).send(
+          "Access request has been sent to the owner. Please wait for approval."
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return res
+        .status(500)
+        .send("An error occurred while processing the access request.");
     }
-
-    if (consent.access_count <= 0) {
-      return res.status(403).send("Access count exhausted.");
-    }
-
-    if (new Date() > consent.validity_period) {
-      return res.status(403).send("Consent validity expired.");
-    }
-
-    consent.access_count -= 1;
-    await consent.save();
-
-   
-
-
-    const encryptedItemId = encrypt(item_id, key);
-    
-    const vaultData = await VaultModel.findOne({
-      encrypted_item_id: encryptedItemId,
-    });
-
-   
-
-    if (!vaultData) {
-      return res.status(404).send("Item not found in the vault.");
-    }
-
-    const decryptedData = decrypt(vaultData.encrypted_item_value, key);
-
-    const dataItem = await DataItemModel.findById(item_id);
-
-    if (!dataItem) {
-      return res.status(404).send("Item not found in the data master.");
-    }
-
-   
-
-    return res.status(200).json({
-      item_name: dataItem.item_name,
-      item_value: decryptedData,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).send("An error occurred while accessing the item.");
-  }
-};
+  };
+  
 
 const ConsentModel = mongoose.model("Consent", consentSchema);
 
