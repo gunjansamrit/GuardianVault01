@@ -26,27 +26,27 @@ consentHistorySchema.statics.getConsentHistoryByUserId = async (req, res) =>  {
     const { userId } = req.params;
     
     try {
-      // Fetch all consents where the provider_id matches the userId
+      
       const consents = await mongoose
-        .model("Consent") // Reference the Consent model
+        .model("Consent") 
         .find({ provider_id: userId })
-        .populate("item_id") // Populate item details (item_name and item_type)
-        .populate("seeker_id"); // Populate seeker details (User)
+        .populate("item_id") 
+        .populate("seeker_id"); 
   
-      // Extract all consent IDs from the fetched consents
+     
       const consentIds = consents.map((consent) => consent._id);
   
-      // Fetch consent histories that match the consent IDs
+      
       const consentHistories = await ConsentHistoryModel.find({ consent_id: { $in: consentIds } }).sort({ requested_at: -1 });
   
-      // Map and format the results
+      
       const result = await Promise.all(
         consentHistories.map(async (history) => {
           const consent = consents.find((c) => c._id.equals(history.consent_id));
   
           if (!consent) return null;
   
-          // Fetch the seeker full name
+          
           const seeker = consent.seeker_id;
           const fullName = `${seeker.first_name} ${seeker.middle_name || ""} ${seeker.last_name}`.trim();
   
@@ -62,7 +62,7 @@ consentHistorySchema.statics.getConsentHistoryByUserId = async (req, res) =>  {
         })
       );
   
-      // Filter out any null entries
+      
       const filteredResult = result.filter((item) => item !== null);
   
       if (filteredResult.length > 0) {
