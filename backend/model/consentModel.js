@@ -29,7 +29,7 @@ const consentSchema = new mongoose.Schema({
   validity_period: {
     type: Date,
 
-    default: Date.MAX_VALUE,
+    default:  new Date(8640000000000000),
   },
 
   access_count: {
@@ -67,6 +67,8 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
   
       
       const updatedStatus = consent.toLowerCase() === "yes" ? "approved" : "rejected";
+
+      console.log(updatedStatus);
   
       
       consentRequest.status = updatedStatus;
@@ -86,7 +88,7 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
       
       await ConsentHistoryModel.create({
         consent_id: consentRequest._id,
-        action: updatedStatus,
+        status: updatedStatus,
         timestamp: new Date(),
         additional_info: `Count: ${count || "N/A"}, Validity: ${validity || "N/A"}`,
       });
@@ -105,63 +107,72 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
 
   //AccessItems
 
-consentSchema.statics.accessItem = async (req, res) => {
-    const { item_id } = req.body; 
-    const { seeker } = req.params; 
+  consentSchema.statics.accessItem = async (req, res) => {
+    const { item_id } = req.body;
+    const { seeker } = req.params;
   
-    const key = process.env.ENCRYPTION_KEY; 
+    const masterKey = process.env.ENCRYPTION_KEY;
   
     try {
-      
       const dataItem = await DataItemModel.findById(item_id);
       if (!dataItem) {
         return res.status(404).send("Item not found in the data master.");
       }
   
-      const provider_id = dataItem.item_owner_id; 
-  
+      const provider_id = dataItem.item_owner_id;
+      const UserModel = require("./userModel")
       
+      const providerUser = await UserModel.findById(provider_id);
+        if (!providerUser) {
+            return res.status(404).send("Provider not found.");
+        }
+
+        const userKey = decrypt(providerUser.key, masterKey);
+  
       let consent = await ConsentModel.findOne({
         item_id,
         seeker_id: seeker,
         provider_id,
       });
-
-
+  
       const ConsentHistoryModel = require("./consentHistoryModel");
-      if (consent && consent.status === "approved") {
-        if (consent.access_count > 0 && new Date() <= consent.validity_period) {
-         
-          consent.access_count -= 1;
-          await consent.save();
+      if (consent) {
+        if (consent.status === "approved") {
+          if (consent.access_count > 0 && new Date() <= consent.validity_period) {
+            consent.access_count -= 1;
+            await consent.save();
+           
   
-         
-          const encryptedItemId = encrypt(item_id, key);
-          const vaultData = await VaultModel.findOne({
-            encrypted_item_id: encryptedItemId,
-          });
+            const encryptedItemId = encrypt(item_id, userKey);
+            
+            const vaultData = await VaultModel.findOne({
+              encrypted_item_id: encryptedItemId,
+            });
   
-          if (!vaultData) {
-            return res.status(404).send("Item not found in the vault.");
+            if (!vaultData) {
+              return res.status(404).send("Item not found in the vault.");
+            }
+  
+            const decryptedData = decrypt(vaultData.encrypted_item_value, userKey);
+            
+  
+            await ConsentHistoryModel.create({
+              consent_id: consent._id,
+              status: "accessed",
+              accessed_at: new Date(),
+            });
+  
+            return res.status(200).json({
+              item_name: dataItem.item_name,
+              item_value: decryptedData,
+            });
+          } else {
+            return res.status(403).send("Consent expired or access count exhausted.");
           }
-  
-          const decryptedData = decrypt(vaultData.encrypted_item_value, key);
-  
-          
-
-          await ConsentHistoryModel.create({
-            consent_id: consent._id,
-            status: "accessed",
-            accessed_at: new Date(),
-          });
-  
-          
-          return res.status(200).json({
-            item_name: dataItem.item_name,
-            item_value: decryptedData,
-          });
-        } else {
-          return res.status(403).send("Consent expired or access count exhausted.");
+        } else if (consent.status === "pending") {
+          return res.status(202).send(
+            "Access request is already pending. Please wait for approval."
+          );
         }
       } else {
         
@@ -169,19 +180,16 @@ consentSchema.statics.accessItem = async (req, res) => {
           item_id,
           seeker_id: seeker,
           provider_id,
-          validity_period: Date.MAX_VALUE,
           access_count: 1,
-          status: "pending", 
+          status: "pending",
         });
   
-        
         await ConsentHistoryModel.create({
           consent_id: newConsent._id,
           status: "requested",
           requested_at: new Date(),
         });
   
-        
         return res.status(202).send(
           "Access request has been sent to the owner. Please wait for approval."
         );

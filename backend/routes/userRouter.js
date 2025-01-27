@@ -15,7 +15,7 @@ router.post('/:userId/addItems',DataItemModel.addItem);
 router.post('/giveConsent',ConsentModel.giveConsent);
 router.post('/:seeker/accessItem',ConsentModel.accessItem);
 
-router.get('/:userId/getConsentHistory',ConsentHistoryModel.getConsentHistory);
+router.get('/:userId/getConsentHistoryByUserId',ConsentHistoryModel.getConsentHistoryByUserId);
 
 
 module.exports = router; 
