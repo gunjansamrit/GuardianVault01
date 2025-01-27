@@ -10,6 +10,8 @@ router.post('/signup', userModel.signup);
 router.post('/login',CredentialModel.login);
 router.get('/getAllUsers',userModel.getAllUsers);
 router.get('/:userId/getItems',DataItemModel.getItemsByUserId);
+router.get('/:userId/getItemMetaDetailsByUser',DataItemModel.getItemMetaDetailsByUser);
+
 router.post('/:userId/addItems',DataItemModel.addItem);
 
 router.post('/giveConsent',ConsentModel.giveConsent);

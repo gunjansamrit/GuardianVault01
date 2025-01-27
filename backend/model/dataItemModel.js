@@ -149,6 +149,19 @@ const dataItemMasterSchema = new mongoose.Schema({
       return res.status(500).send('An error occurred while adding the item');
     }
   };
+
+  //getMetadata BY userID
+  dataItemMasterSchema.statics.getItemMetaDetailsByUser = async (req, res) => {
+    const { userId } = req.params; 
+    console.log(userId);
+    try {
+        const items = await DataItemModel.find({ item_owner_id: userId }, {});
+        return res.status(200).json(items);
+    } catch (error) {
+        console.error("Error fetching item details for user:", error);
+        return res.status(500).json({ message: "Failed to fetch item details for the specified user" });
+    }
+};
   
 
   const DataItemModel = mongoose.model("DataItem", dataItemMasterSchema);
