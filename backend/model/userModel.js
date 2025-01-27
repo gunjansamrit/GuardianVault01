@@ -107,6 +107,7 @@ userSchema.statics.signup = async function (req, res) {
       
       newUser.data_items = savedDataItems;
       await newUser.save();
+     
   
       return res.status(201).send("Registration Successful");
     } catch (error) {
@@ -128,7 +129,7 @@ userSchema.statics.signup = async function (req, res) {
         return res.status(404).send('No users found');
       }
   
-     
+     console.log(users);
       return res.status(200).json(users);
     } catch (error) {
       console.error(error);

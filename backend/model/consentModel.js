@@ -110,97 +110,112 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
   consentSchema.statics.accessItem = async (req, res) => {
     const { item_id } = req.body;
     const { seeker } = req.params;
-  
+
     const masterKey = process.env.ENCRYPTION_KEY;
-  
+
     try {
-      const dataItem = await DataItemModel.findById(item_id);
-      if (!dataItem) {
-        return res.status(404).send("Item not found in the data master.");
-      }
-  
-      const provider_id = dataItem.item_owner_id;
-      const UserModel = require("./userModel")
-      
-      const providerUser = await UserModel.findById(provider_id);
+        const dataItem = await DataItemModel.findById(item_id);
+        if (!dataItem) {
+            return res.status(404).send("Item not found in the data master.");
+        }
+
+        const provider_id = dataItem.item_owner_id;
+        const UserModel = require("./userModel");
+
+        const providerUser = await UserModel.findById(provider_id);
         if (!providerUser) {
             return res.status(404).send("Provider not found.");
         }
 
         const userKey = decrypt(providerUser.key, masterKey);
-  
-      let consent = await ConsentModel.findOne({
-        item_id,
-        seeker_id: seeker,
-        provider_id,
-      });
-  
-      const ConsentHistoryModel = require("./consentHistoryModel");
-      if (consent) {
-        if (consent.status === "approved") {
-          if (consent.access_count > 0 && new Date() <= consent.validity_period) {
-            consent.access_count -= 1;
-            await consent.save();
-           
-  
-            const encryptedItemId = encrypt(item_id, userKey);
-            
-            const vaultData = await VaultModel.findOne({
-              encrypted_item_id: encryptedItemId,
-            });
-  
-            if (!vaultData) {
-              return res.status(404).send("Item not found in the vault.");
+
+        let consent = await ConsentModel.findOne({
+            item_id,
+            seeker_id: seeker,
+            provider_id,
+        });
+
+        const ConsentHistoryModel = require("./consentHistoryModel");
+        if (consent) {
+            if (consent.status === "approved") {
+                if (consent.access_count > 0 && new Date() <= consent.validity_period) {
+                    consent.access_count -= 1;
+                    await consent.save();
+
+                    const encryptedItemId = encrypt(item_id, userKey);
+
+                    const vaultData = await VaultModel.findOne({
+                        encrypted_item_id: encryptedItemId,
+                    });
+
+                    if (!vaultData) {
+                        return res.status(404).send("Item not found in the vault.");
+                    }
+
+                    const decryptedData = decrypt(vaultData.encrypted_item_value, userKey);
+
+                    await ConsentHistoryModel.create({
+                        consent_id: consent._id,
+                        status: "accessed",
+                        accessed_at: new Date(),
+                    });
+
+                    return res.status(200).json({
+                        item_name: dataItem.item_name,
+                        item_value: decryptedData,
+                    });
+                } else {
+                    // If access count is zero or validity expired, create new consent
+                    const newConsent = await ConsentModel.create({
+                        item_id,
+                        seeker_id: seeker,
+                        provider_id,
+                        access_count: 1,
+                        status: "pending",
+                    });
+
+                    await ConsentHistoryModel.create({
+                        consent_id: newConsent._id,
+                        status: "requested",
+                        requested_at: new Date(),
+                    });
+
+                    return res.status(202).send(
+                        "Access count exhausted or consent expired. New access request has been sent to the owner."
+                    );
+                }
+            } else if (consent.status === "pending") {
+                return res.status(202).send(
+                    "Access request is already pending. Please wait for approval."
+                );
             }
-  
-            const decryptedData = decrypt(vaultData.encrypted_item_value, userKey);
-            
-  
+        } else {
+            // Create new consent if none exists
+            const newConsent = await ConsentModel.create({
+                item_id,
+                seeker_id: seeker,
+                provider_id,
+                access_count: 1,
+                status: "pending",
+            });
+
             await ConsentHistoryModel.create({
-              consent_id: consent._id,
-              status: "accessed",
-              accessed_at: new Date(),
+                consent_id: newConsent._id,
+                status: "requested",
+                requested_at: new Date(),
             });
-  
-            return res.status(200).json({
-              item_name: dataItem.item_name,
-              item_value: decryptedData,
-            });
-          } else {
-            return res.status(403).send("Consent expired or access count exhausted.");
-          }
-        } else if (consent.status === "pending") {
-          return res.status(202).send(
-            "Access request is already pending. Please wait for approval."
-          );
+
+            return res.status(202).send(
+                "Access request has been sent to the owner. Please wait for approval."
+            );
         }
-      } else {
-        
-        const newConsent = await ConsentModel.create({
-          item_id,
-          seeker_id: seeker,
-          provider_id,
-          access_count: 1,
-          status: "pending",
-        });
-  
-        await ConsentHistoryModel.create({
-          consent_id: newConsent._id,
-          status: "requested",
-          requested_at: new Date(),
-        });
-  
-        return res.status(202).send(
-          "Access request has been sent to the owner. Please wait for approval."
-        );
-      }
     } catch (error) {
-      console.error(error);
-      return res
-        .status(500)
-        .send("An error occurred while processing the access request.");
+        console.error(error);
+        return res
+            .status(500)
+            .send("An error occurred while processing the access request.");
     }
-  };
+};
   
 
 const ConsentModel = mongoose.model("Consent", consentSchema);
