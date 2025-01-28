@@ -19,5 +19,7 @@ router.post('/:seeker/accessItem',ConsentModel.accessItem);
 
 router.get('/:userId/getConsentHistoryByUserId',ConsentHistoryModel.getConsentHistoryByUserId);
 
+router.get('/:userId/getConsentListByUserId',ConsentModel.getConsentListByUserId);
+
 
 module.exports = router; 

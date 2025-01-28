@@ -103,6 +103,29 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
     }
   };
 
+  //getConsentListByUserId 
+  // Add the static method to the consentSchema
+  consentSchema.statics.getConsentListByUserId = async function (req, res, next) {
+    const {userId } = req.params;
+    try {
+      // Query consents where the user is either a provider or seeker and sort by date_created in descending order
+      const consents = await ConsentModel.find({
+        $or: [{ provider_id: userId }, { seeker_id: userId }],
+      })
+        .populate("item_id", "item_name") // Populate the DataItem details (e.g., item_name)
+        .populate("seeker_id", "name email") // Populate the seeker details
+        .populate("provider_id", "name email") // Populate the provider details
+        .sort({ date_created: -1 }); // Sort in descending order of date_created
+  
+      return res.status(200).send(consents);
+    } catch (error) {
+      console.error("Error fetching consents:", error);
+      throw error;
+    }
+  };
+  
+  
+
 
 
   //AccessItems
