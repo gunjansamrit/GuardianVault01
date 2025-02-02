@@ -12,38 +12,33 @@ const credentialSchema = new mongoose.Schema({
   password: { type: String, required: true },
 });
 
-credentialSchema.statics.login = async function (req, res, next) {
-  const { username, password } = req.body;
 
-  try {
-    
-    const credential = await CredentialModel.findOne({ username });
-    
-    if (!credential) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-
-    const isMatch = await verifyPassword(password, credential.password);
-    
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid password' });
-    }
-
+credentialSchema.statics.findUserIdByUsername = async function (req, res) {
+    const { username } = req.body; // Get the username from the request body
+    console.log(username)
   
-    const user = await mongoose.model('User').findOne({ credential_id: credential._id });
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    try {
+      // Find the credential record by username
+      const credential = await CredentialModel.findOne({ username });
+  
+      if (!credential) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Find the user associated with the credential
+      const user = await mongoose.model('User').findOne({ credential_id: credential._id });
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Send the userId as the response
+      return res.status(200).json({ userId: user._id });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Server error' });
     }
-
-    
-    return res.status(200).json({ userId: user._id });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-};
+  };
 
 const CredentialModel = mongoose.model('Credential', credentialSchema);
 

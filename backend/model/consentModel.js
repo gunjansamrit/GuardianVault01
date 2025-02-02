@@ -16,7 +16,7 @@ const consentSchema = new mongoose.Schema({
 
   seeker_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Requestor",
     required: true,
   },
 
@@ -109,7 +109,7 @@ consentSchema.statics.giveConsent = async function (req, res, next) {
     const {userId } = req.params;
     try {
       // Query consents where the user is either a provider or seeker and sort by date_created in descending order
-      const consents = await ConsentModel.find({
+      const consents = await ConsentHistoryModel.find({
         $or: [{ provider_id: userId }, { seeker_id: userId }],
       })
         .populate("item_id", "item_name") // Populate the DataItem details (e.g., item_name)

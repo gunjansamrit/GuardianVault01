@@ -6,6 +6,7 @@ const db = require('./dbConnections');
 const cors = require('cors');
 
 const userRouter = require('./routes/userRouter');
+const requestorRouter = require('./routes/requestorUser');
 
 
 
@@ -14,6 +15,7 @@ const port = process.env.PORT;
 app.use(express.json());
 
 app.use('/', userRouter);
+app.use('/requestor', requestorRouter);
 
 // app.use(errlogger);
 

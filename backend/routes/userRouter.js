@@ -5,17 +5,17 @@ const DataItemModel = require("../model/dataItemModel");
 const ConsentModel = require("../model/consentModel");
 const CredentialModel = require("../model/credentialModel");
 const ConsentHistoryModel = require("../model/consentHistoryModel");
+const { verifyJwtToken } = require("../utils/jwtToken");
 
 router.post('/signup', userModel.signup);
-router.post('/login',CredentialModel.login);
-router.get('/getAllUsers',userModel.getAllUsers);
+router.post('/login',userModel.login);
+// router.get('/getAllUsers',userModel.getAllUsers);
+
 router.get('/:userId/getItems',DataItemModel.getItemsByUserId);
-router.get('/:userId/getItemMetaDetailsByUser',DataItemModel.getItemMetaDetailsByUser);
 
 router.post('/:userId/addItems',DataItemModel.addItem);
 
 router.post('/giveConsent',ConsentModel.giveConsent);
-router.post('/:seeker/accessItem',ConsentModel.accessItem);
 
 router.get('/:userId/getConsentHistoryByUserId',ConsentHistoryModel.getConsentHistoryByUserId);
 

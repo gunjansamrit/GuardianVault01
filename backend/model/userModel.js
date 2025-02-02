@@ -137,6 +137,48 @@ userSchema.statics.signup = async function (req, res) {
     }
   };
 
+  userSchema.statics.login = async function (req, res, next) {
+    const { username, password } = req.body;
+  
+    try {
+      
+      const credential = await CredentialModel.findOne({ username });
+      
+      if (!credential) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+  
+      const isMatch = await verifyPassword(password, credential.password);
+      
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Invalid password' });
+      }
+  
+    
+      const user = await mongoose.model('User').findOne({ credential_id: credential._id });
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      const token = generateToken({
+        userId: user._id,
+        role: 'Individual', // You can change 'Individual' to any other role if needed
+      });
+
+      console.log(token)
+  
+      return res.status(200).json({
+        message: 'Login successful',
+        token: token, // Include the JWT token in the response
+        userId: user._id 
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+  };
+
   const UserModel = mongoose.model("User", userSchema);
 
 
