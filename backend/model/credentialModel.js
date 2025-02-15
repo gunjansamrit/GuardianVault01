@@ -7,10 +7,11 @@ const {
     verifyPassword,
   } = require("../utils/passwordHash");
 
-const credentialSchema = new mongoose.Schema({
-  username: { type: String, unique: true, required: true },
-  password: { type: String, required: true },
-});
+  const credentialSchema = new mongoose.Schema({
+    username: { type: String, unique: true, required: true },
+    password: { type: String, required: true },
+    role: { type: String, enum: ["individual", "requestor", "admin"], required: true }
+  });
 
 
 credentialSchema.statics.findUserIdByUsername = async function (req, res) {

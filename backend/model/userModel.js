@@ -13,108 +13,83 @@ const DataItemModel = require("./dataItemModel");
 const {encrypt} = require("../utils/encryption");
 const {VaultModel} = require("./vaultModel")
 
+
 const userSchema = new mongoose.Schema({
     credential_id: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
     first_name: { type: String, required: true },
     middle_name: { type: String },
+    age: { type: Number, required: true }, // Added age
+
     last_name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
+    date_of_birth: { type: Date, required: true }, // Added date_of_birth
     mobile_no: { type: String, required: true },
-    key: { type: String, required: true, immutable: true }, 
+    key: { type: String, required: true, immutable: true },
     data_items: [{ type: mongoose.Schema.Types.ObjectId, ref: "DataItem" }],
-  });
+});
+
+
+
   
 
 
 //signup
 userSchema.statics.signup = async function (req, res) {
     const userData = req.body;
-    const masterKey = process.env.ENCRYPTION_KEY; 
-  
+    const masterKey = process.env.ENCRYPTION_KEY;
+
     try {
-      
-      const userKey = userData.key;
-      if (!userKey) {
-        return res.status(400).send("Encryption key is required");
-      }
-  
-     
-      const hashedPassword = await generatePasswordHash(req.body.password);
-  
-      const credentialsData = {
-        username: userData.username,
-        password: hashedPassword,
-      };
-  
-     
-      const existingCredentials = await CredentialModel.findOne({ username: credentialsData.username });
-      if (existingCredentials) {
-        return res.status(400).send("Username already exists");
-      }
-  
-      
-      const existingUser = await UserModel.findOne({ email: userData.email });
-      if (existingUser) {
-        return res.status(400).send("Email already exists");
-      }
-  
-      
-      const credentials = await CredentialModel.create(credentialsData);
-  
-     
-      const encryptedUserKey = encrypt(userKey, masterKey);
-  
-     
-      const newUser = await UserModel.create({
-        credential_id: credentials._id,
-        first_name: userData.first_name,
-        middle_name: userData.middle_name,
-        last_name: userData.last_name,
-        email: userData.email,
-        mobile_no: userData.mobile_no,
-        key: encryptedUserKey, 
-      });
-  
-     
-      const dataItems = [
-        { type: "email", value: userData.email },
-        { type: "mobile_no", value: userData.mobile_no },
-        { type: "age", value: userData.age.toString() },
-        { type: "date_of_birth", value: userData.date_of_birth.toString() },
-      ];
-  
-      const savedDataItems = [];
-  
-    
-      for (const item of dataItems) {
-        const encryptedValue = encrypt(item.value, userKey); 
-  
-        const dataItem = new DataItemModel({
-          item_name: item.type,
-          item_owner_id: newUser._id,
+        const userKey = userData.key;
+        if (!userKey) {
+            return res.status(400).send("Encryption key is required");
+        }
+
+        // Hash the password
+        const hashedPassword = await generatePasswordHash(userData.password);
+
+        const {UserBacklogModel} = require("./userBacklog")
+
+        // Check if the username already exists in the backlog or main user collection
+        const existingUserByUsername = await UserBacklogModel.findOne({ username: userData.username, status: { $ne: "rejected" } });
+        const existingUserMain = await mongoose.model('User').findOne({ username: userData.username  });
+        if (existingUserByUsername || existingUserMain) {
+            return res.status(400).send("Username already exists");
+        }
+
+        // Check if the email already exists in the backlog or main user collection
+        const existingUserByEmail = await UserBacklogModel.findOne({ 
+            email: userData.email, 
+            status: { $ne: "rejected" }  // Ignore rejected users
+        });        const existingEmailMain = await mongoose.model('User').findOne({ email: userData.email });
+        if (existingUserByEmail || existingEmailMain) {
+            return res.status(400).send("Email already exists");
+        }
+
+        // Encrypt the user key
+        const encryptedUserKey = encrypt(userKey, masterKey);
+
+        // Create the user in the backlog
+        const newUserBacklog = await UserBacklogModel.create({
+            username: userData.username,
+            password: hashedPassword,
+            role: userData.role,
+            first_name: userData.first_name,
+            middle_name: userData.middle_name,
+            last_name: userData.last_name,
+            email: userData.email,
+            mobile_no: userData.mobile_no,
+            key: encryptedUserKey,
+            date_of_birth: userData.date_of_birth, // Added date_of_birth
+            age: userData.age, // Added age
+            status: "pending", // User remains in backlog until approved
         });
-  
-        const savedItem = await dataItem.save();
-        savedDataItems.push(savedItem._id);
-  
-      
-        await VaultModel.create({
-          encrypted_item_id: encrypt(savedItem._id.toString(), userKey), 
-          encrypted_item_value: encryptedValue,
-        });
-      }
-  
-      
-      newUser.data_items = savedDataItems;
-      await newUser.save();
-     
-  
-      return res.status(201).send("Registration Successful");
+
+        return res.status(201).send("Your registration details have been submitted. Waiting for admin approval.");
     } catch (error) {
-      console.error(error);
-      return res.status(500).send("An error occurred during registration");
+        console.error(error);
+        return res.status(500).send("An error occurred during registration.");
     }
-  };
+};
   
 
 
@@ -138,7 +113,7 @@ userSchema.statics.signup = async function (req, res) {
   };
 
   userSchema.statics.login = async function (req, res, next) {
-    const { username, password } = req.body;
+    const { username, password,role } = req.body;
   
     try {
       
@@ -147,6 +122,10 @@ userSchema.statics.signup = async function (req, res) {
       if (!credential) {
         return res.status(404).json({ message: 'User not found' });
       }
+
+      if (credential.role !== role) {
+        return res.status(400).json({ message: 'Invalid role or your role is not valid' });
+    }
   
   
       const isMatch = await verifyPassword(password, credential.password);
@@ -166,7 +145,7 @@ userSchema.statics.signup = async function (req, res) {
         role: 'Individual', // You can change 'Individual' to any other role if needed
       });
 
-      console.log(token)
+      
   
       return res.status(200).json({
         message: 'Login successful',
