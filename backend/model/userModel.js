@@ -113,7 +113,7 @@ userSchema.statics.signup = async function (req, res) {
   };
 
   userSchema.statics.login = async function (req, res, next) {
-    const { username, password,role } = req.body;
+    const { username, password,role } = req.body;   //doubt no role needed(Rishabh)
   
     try {
       
@@ -124,7 +124,7 @@ userSchema.statics.signup = async function (req, res) {
       }
 
       if (credential.role !== role) {
-        return res.status(400).json({ message: 'Invalid role or your role is not valid' });
+        return res.status(400).json({ message: 'Invalid role or your role is not valid' });//doubt(Rishabh) no check needed
     }
   
   
@@ -150,7 +150,8 @@ userSchema.statics.signup = async function (req, res) {
       return res.status(200).json({
         message: 'Login successful',
         token: token, // Include the JWT token in the response
-        userId: user._id 
+        userId: user._id,
+        role:'provider'//role needs to send here(Rishabh)
       });
     } catch (error) {
       console.error(error);

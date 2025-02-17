@@ -81,7 +81,7 @@ adminSchema.statics.login = async function (req, res) {
         }
 
         const token = generateToken({ userId: admin._id, role: "admin" });
-        return res.status(200).json({ message: "Login successful", token, userId: admin._id });
+        return res.status(200).json({ message: "Login successful", token, userId: admin._id });//doubt(Rishabh) role is needed
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: "Server error" });
