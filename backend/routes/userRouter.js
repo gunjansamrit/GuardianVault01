@@ -15,6 +15,10 @@ router.get('/:userId/getItems',DataItemModel.getItemsByUserId);
 
 router.post('/:userId/addItems',DataItemModel.addItem);
 
+// (Rishabh) - added delete and edit items
+router.post('/:userId/deleteItems', DataItemModel.deleteItem);
+router.post('/:userId/editItems', DataItemModel.updateItem);
+
 router.post('/giveConsent',ConsentModel.giveConsent);
 
 router.get('/:userId/getConsentHistoryByUserId',ConsentHistoryModel.getConsentHistoryByUserId);

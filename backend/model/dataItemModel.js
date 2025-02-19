@@ -143,6 +143,7 @@ const dataItemMasterSchema = new mongoose.Schema({
         message: 'Item added successfully',
         item_id: savedItem._id,
         item_name: savedItem.item_name,
+
       });
     } catch (error) {
       console.error(error);
@@ -150,9 +151,137 @@ const dataItemMasterSchema = new mongoose.Schema({
     }
   };
 
+
+  // Update Items
+  dataItemMasterSchema.statics.updateItem = async (req, res) => {
+    const { userId } = req.params;
+    const { itemId, item_name, item_value } = req.body;
+
+    if (!itemId || !item_name || !item_value) {
+      return res.status(400).send('Item ID, name, and value are required for updating.');
+    }
+
+    try {
+      // Find the user first
+      const UserModel = require("./userModel");
+      const user = await UserModel.findOne({ _id: userId });
+      if (!user) {
+        return res.status(404).send('User not found');
+      }
+
+      const encryptedUserKey = user.key;
+      if (!encryptedUserKey) {
+        return res.status(400).send('User encryption key not found');
+      }
+
+      const masterKey = process.env.ENCRYPTION_KEY;
+      const decryptedUserKey = decrypt(encryptedUserKey, masterKey);
+
+      // Find the item in DataItemModel
+      const item = await DataItemModel.findOne({ _id: itemId, item_owner_id: userId });
+      if (!item) {
+        return res.status(404).send('Item not found or does not belong to this user');
+      }
+
+      // Update item name in DataItemModel
+      item.item_name = item_name;
+      await item.save();
+
+      // Update in VaultModel
+      const encryptedItemId = encrypt(item._id.toString(), decryptedUserKey);
+      const encryptedValue = encrypt(item_value, decryptedUserKey);
+
+      const vaultUpdateResult = await VaultModel.updateOne(
+        { encrypted_item_id: encryptedItemId },
+        { encrypted_item_value: encryptedValue }
+      );
+
+      if (vaultUpdateResult.nModified === 0) {
+        console.warn(`No vault data updated for item_id: ${item._id}`);
+        // If no vault data was found, you might want to create one here or handle this scenario differently
+        await VaultModel.create({
+          encrypted_item_id: encryptedItemId,
+          encrypted_item_value: encryptedValue
+        });
+      }
+
+      return res.status(200).json({
+        message: 'Item updated successfully',
+        itemId: itemId,
+        item_name: item_name
+      });
+    } catch (error) {
+      console.error("Error updating item:", error);
+      return res.status(500).send('An error occurred while updating the item');
+    }
+  };
+
+  
+
+//Delete Items
+  dataItemMasterSchema.statics.deleteItem = async (req, res) => {
+    const { userId } = req.params;
+    const { itemId } = req.body; // Assuming the item ID to delete is sent in the request body
+  
+    console.log("userId",userId);
+    console.log("itemId",itemId);
+
+    if (!itemId) {
+      return res.status(400).send('Item ID is required for deletion.');
+    }
+  
+    try {
+      // Find the user first
+      const UserModel = require("./userModel");
+      const user = await UserModel.findOne({ _id: userId });
+      if (!user) {
+        return res.status(404).send('User not found');
+      }
+  
+      const encryptedUserKey = user.key;
+      if (!encryptedUserKey) {
+        return res.status(400).send('User encryption key not found');
+      }
+  
+      const masterKey = process.env.ENCRYPTION_KEY;
+      const decryptedUserKey = decrypt(encryptedUserKey, masterKey);
+  
+      // Find the item in DataItemModel
+      const item = await DataItemModel.findOne({ _id: itemId, item_owner_id: userId });
+      if (!item) {
+        return res.status(404).send('Item not found or does not belong to this user');
+      }
+  
+      // Delete from VaultModel first since we need the encrypted_item_id
+      const encryptedItemId = encrypt(item._id.toString(), decryptedUserKey);
+      const vaultDeletion = await VaultModel.deleteOne({ encrypted_item_id: encryptedItemId });
+      if (vaultDeletion.deletedCount === 0) {
+        console.warn(`No vault data found for item_id: ${item._id}`);
+      }
+  
+      // Delete the item from DataItemModel
+      const itemDeletion = await DataItemModel.deleteOne({ _id: itemId });
+      
+      if (itemDeletion.deletedCount === 0) {
+        return res.status(500).send('Item deletion failed');
+      }
+  
+      return res.status(200).json({
+        message: 'Item deleted successfully',
+        itemId: itemId
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send('An error occurred while deleting the item');
+    }
+  };
+
+
+
   //getMetadata BY userID
   dataItemMasterSchema.statics.getItemMetaDetailsByUser = async (req, res) => {
     const { userId } = req.params; 
+    console.log("userId",userId);
 
     try {
         const items = await DataItemModel.find({ item_owner_id: userId }, {});

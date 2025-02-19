@@ -9,6 +9,8 @@ const UserModel = require("./userModel");
 const DataItemModel = require("./dataItemModel");
 const {encrypt,decrypt} = require("../utils/encryption");
 const {VaultModel} = require("./vaultModel");
+const { RequestorBacklogModel } = require("./requestorBacklog");
+const RequestorModel = require("../model/requesterUserModel");
 
 
 
@@ -91,6 +93,21 @@ adminSchema.statics.login = async function (req, res) {
 adminSchema.statics.getIndividualBackLog = async function (req, res) {
     try {
         const pendingBacklogs = await UserBacklogModel.find({ status: "pending" })
+            .sort({ created_at: 1 }) // Ascending order
+            .select("-password -key") // Exclude password and key
+            .exec();
+
+        return res.status(200).json({ data: pendingBacklogs });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: "Server error" });
+    }
+};
+
+
+adminSchema.statics.getRequestorBackLog = async function (req, res) {
+    try {
+        const pendingBacklogs = await RequestorBacklogModel.find({ status: "pending" })
             .sort({ created_at: 1 }) // Ascending order
             .select("-password -key") // Exclude password and key
             .exec();
@@ -206,6 +223,114 @@ adminSchema.statics.individualApproval = async function (req, res) {
         return res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
+
+adminSchema.statics.requestorApproval = async function (req, res) {
+    try {
+        const { userId, action } = req.body;
+
+        // Validate request
+        if (!userId || !["approve", "reject"].includes(action)) {
+            return res.status(400).json({ message: "Invalid request" });
+        }
+
+        // Check if requestor exists in backlog
+        const requestorBacklog = await RequestorBacklogModel.findById(userId);
+        if (!requestorBacklog) {
+            return res.status(404).json({ message: "Requestor not found in backlog" });
+        }
+
+        if (action === "approve") {
+            const masterKey = process.env.ENCRYPTION_KEY;
+
+            // Check for existing credentials or requestor with the same username or email
+            const existingCredentials = await CredentialModel.findOne({ username: requestorBacklog.name });
+            if (existingCredentials) {
+                return res.status(400).json({ message: "Requestor name already exists" });
+            }
+
+            const existingRequestor = await RequestorModel.findOne({ email: requestorBacklog.email });
+            if (existingRequestor) {
+                return res.status(400).json({ message: "Requestor email already exists" });
+            }
+
+            // Create credentials for the requestor
+            const credentials = await CredentialModel.create({
+                username: requestorBacklog.username,
+                password: requestorBacklog.password,
+                role: "requestor",
+            });
+
+            // Decrypt the user key
+            const decryptedUserKey = decrypt(requestorBacklog.key, masterKey);
+
+            // Create new requestor
+            const newRequestor = await RequestorModel.create({
+                credential_id: credentials._id,
+                name: requestorBacklog.name,
+                type: requestorBacklog.type,
+                registration_no: requestorBacklog.registration_no,
+                email: requestorBacklog.email,
+                contact_no: requestorBacklog.contact_no,
+                address: requestorBacklog.address,
+                key: requestorBacklog.key, // Keep the encrypted key
+            });
+
+            // Encrypt and store requestor data in Vault
+            const dataItems = [
+                { type: "email", value: requestorBacklog.email },
+                { type: "contact_no", value: requestorBacklog.contact_no },
+                { type: "registration_no", value: requestorBacklog.registration_no },
+            ];
+
+            const savedDataItems = [];
+
+            for (const item of dataItems) {
+                const encryptedValue = encrypt(item.value, decryptedUserKey);
+
+                const dataItem = new DataItemModel({
+                    item_name: item.type,
+                    item_owner_id: newRequestor._id,
+                });
+
+                const savedItem = await dataItem.save();
+                savedDataItems.push(savedItem._id);
+
+                await VaultModel.create({
+                    encrypted_item_id: encrypt(savedItem._id.toString(), decryptedUserKey),
+                    encrypted_item_value: encryptedValue,
+                });
+            }
+
+            // Associate data items with the new requestor
+            newRequestor.data_items = savedDataItems;
+            await newRequestor.save();
+
+            // Update backlog status to "approved"
+            requestorBacklog.status = "approved";
+            await requestorBacklog.save();
+
+            return res.status(200).json({ message: "Requestor approved successfully" });
+
+        } else if (action === "reject") {
+            // Update backlog status to "rejected"
+            requestorBacklog.status = "rejected";
+            await requestorBacklog.save();
+            return res.status(200).json({ message: "Requestor rejected successfully" });
+        }
+
+    } catch (error) {
+        console.error("Error in requestorApproval:", error);
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+
+
+
+
+
+
 
 
 // Use existing model if already compiled

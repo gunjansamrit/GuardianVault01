@@ -10,6 +10,7 @@ const {
 } = require("../utils/passwordHash"); 
 const CredentialModel = require("./credentialModel");
 const DataItemModel = require("./dataItemModel");
+// const UserBacklogModel = require("./userBacklog");
 const {encrypt} = require("../utils/encryption");
 const {VaultModel} = require("./vaultModel")
 
@@ -84,11 +85,19 @@ userSchema.statics.signup = async function (req, res) {
             status: "pending", // User remains in backlog until approved
         });
 
-        return res.status(201).send("Your registration details have been submitted. Waiting for admin approval.");
-    } catch (error) {
-        console.error(error);
-        return res.status(500).send("An error occurred during registration.");
-    }
+        // Send a JSON response with status and message
+        return res.status(201).json({ 
+          status: "success", 
+          message: "Your registration details have been submitted Succesfully! Waiting for Admin approval..." 
+      }); // Changed to JSON
+
+  } catch (error) {
+      console.error(error);
+      return res.status(500).json({ 
+          status: "failed",  // Indicate failure
+          message: "An error occurred during registration." 
+      }); // Changed to JSON
+  }
 };
   
 
@@ -112,52 +121,65 @@ userSchema.statics.signup = async function (req, res) {
     }
   };
 
-  userSchema.statics.login = async function (req, res, next) {
-    const { username, password,role } = req.body;   //doubt no role needed(Rishabh)
-  
-    try {
-      
-      const credential = await CredentialModel.findOne({ username });
-      
-      if (!credential) {
-        return res.status(404).json({ message: 'User not found' });
-      }
 
-      if (credential.role !== role) {
-        return res.status(400).json({ message: 'Invalid role or your role is not valid' });//doubt(Rishabh) no check needed
-    }
+
   
-  
-      const isMatch = await verifyPassword(password, credential.password);
-      
-      if (!isMatch) {
-        return res.status(400).json({ message: 'Invalid password' });
-      }
-  
+ userSchema.statics.login = async function (req, res, next) {
+  const { username, password, role } = req.body;
+
+  try {
+    // First check in UserBacklogModel for status
+    const {UserBacklogModel} = require("./userBacklog")
+    const userBacklog = await UserBacklogModel.findOne({ username });
     
-      const user = await mongoose.model('User').findOne({ credential_id: credential._id });
-  
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+    if (userBacklog) {
+      if (userBacklog.status === 'pending') {
+        return res.status(450).json({ message: 'Admin is processing your data. We\'ll send you an email soon. Stay connected!', status: 'pending' });
       }
-      const token = generateToken({
-        userId: user._id,
-        role: 'Individual', // You can change 'Individual' to any other role if needed
-      });
-
-      
-  
-      return res.status(200).json({
-        message: 'Login successful',
-        token: token, // Include the JWT token in the response
-        userId: user._id,
-        role:'provider'//role needs to send here(Rishabh)
-      });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ message: 'Server error' });
+      if (userBacklog.status === 'rejected') {
+        return res.status(450).json({ message: 'Your registration has been rejected.', status: 'rejected' });
+      }
     }
-  };
+
+    // Proceed with the normal login flow
+    const credential = await CredentialModel.findOne({ username });
+
+    if (!credential) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (credential.role !== role) {
+      return res.status(400).json({ message: 'Invalid role or your role is not valid' });
+    }
+
+    const isMatch = await verifyPassword(password, credential.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid password' });
+    }
+
+    const user = await mongoose.model('User').findOne({ credential_id: credential._id });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const token = generateToken({
+      userId: user._id,
+      role: 'Individual',
+    });
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token: token,
+      userId: user._id,
+      role: 'provider',
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
 
   const UserModel = mongoose.model("User", userSchema);
 
