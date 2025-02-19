@@ -50,6 +50,30 @@ const consentSchema = new mongoose.Schema({
   },
 });
 
+consentSchema.statics.getApprovedItemsByProvider = async function (req, res) {
+    const {  provider_id } = req.body;
+    const { seeker_id } = req.params;
+
+    try {
+        const approvedConsents = await this.find({
+            seeker_id,
+            provider_id,
+            status: "approved",
+            access_count: { $gt: 0 }
+        }).select("item_id");
+
+        if (!approvedConsents.length) {
+            return res.status(404).json({ message: "No approved items found." });
+        }
+
+        return res.status(200).json(approvedConsents);
+    } catch (error) {
+        console.error("Error fetching approved items:", error);
+        return res.status(500).json({ message: "An error occurred while retrieving approved items." });
+    }
+};
+
+
 
 //provideConsent
 consentSchema.statics.giveConsent = async function (req, res, next) {

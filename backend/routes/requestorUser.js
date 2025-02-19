@@ -13,6 +13,7 @@ router.post('/login',RequestorModel.login);
 // router.post('/findUserIdByUsername',CredentialModel.findUserIdByUsername);
 router.get('/:userId/getItemMetaDetailsByUser',DataItemModel.getItemMetaDetailsByUser);
 // router.post('/:seeker/accessItem',ConsentModel.accessItem);
+router.post('/:seeker/getApprovedItemsByProvider',ConsentModel.getApprovedItemsByProvider);
 // router.get('/:userId/getRequestorConsentHistoryByUserId',ConsentHistoryModel.getRequestorConsentHistoryByUserId);
 
 
