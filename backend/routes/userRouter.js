@@ -11,6 +11,8 @@ router.post('/signup', userModel.signup);
 router.post('/login',userModel.login);
 // router.get('/getAllUsers',userModel.getAllUsers);
 
+
+router.get('/:userId/getUserData', userModel.getUserData);
 router.get('/:userId/getItems',DataItemModel.getItemsByUserId);
 
 router.post('/:userId/addItems',DataItemModel.addItem);
@@ -19,11 +21,15 @@ router.post('/:userId/addItems',DataItemModel.addItem);
 router.post('/:userId/deleteItems', DataItemModel.deleteItem);
 router.post('/:userId/editItems', DataItemModel.updateItem);
 
+
 router.post('/giveConsent',ConsentModel.giveConsent);
+router.get('/:userId/getConsentListByUserId',ConsentModel.getConsentListByUserId);
+
+
 
 router.get('/:userId/getConsentHistoryByUserId',ConsentHistoryModel.getConsentHistoryByUserId);
 
-router.get('/:userId/getConsentListByUserId',ConsentModel.getConsentListByUserId);
+
 
 
 module.exports = router; 
