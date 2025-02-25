@@ -10,6 +10,7 @@ const UserModel = require("../model/userModel");
 
 router.post('/signup', RequestorModel.signup);
 router.post('/login',RequestorModel.login);
+router.get('/:userId/getRequestorData', RequestorModel.getRequestorData);
 router.post('/check-consent', UserModel.checkAndProcessConsent);
 router.post('/:seeker/accessItem',ConsentModel.accessItem);
 
@@ -18,7 +19,7 @@ router.post('/:seeker/accessItem',ConsentModel.accessItem);
 // router.get('/:user/getItemMetaDetailsByUserName',DataItemModel.getItemMetaDetailsByUserName);
 // router.post('/:seeker/accessItem',ConsentModel.accessItem);
 // router.post('/:seeker/getApprovedItemsByProvider',ConsentModel.getApprovedItemsByProvider);
-// router.get('/:userId/getRequestorConsentHistoryByUserId',ConsentHistoryModel.getRequestorConsentHistoryByUserId);
+router.get('/:userId/getRequestorConsentHistoryByUserId',ConsentHistoryModel.getRequestorConsentHistoryByUserId);
 
 
 module.exports = router; 

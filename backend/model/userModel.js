@@ -162,130 +162,93 @@ userSchema.statics.login = async function (req, res, next) {
     }
 };
 
-// Updated checkAndProcessConsent method
+// Updated checkAndProcessConsent method for search
 userSchema.statics.checkAndProcessConsent = async function (req, res) {
-    const { providerName, seekerName } = req.body;
-    const masterKey = process.env.ENCRYPTION_KEY;
-    const ConsentModel = require("./consentModel");
-    const RequestorModel = require("./requesterUserModel");
+  const { providerName, seekerName } = req.body;
+  console.log("Step 1: Starting checkAndProcessConsent for providerName:", providerName, "seekerName:", seekerName);
 
-    console.log("checkAndProcessConsent", providerName, seekerName);
+  try {
+    const providerCredential = await CredentialModel.findOne({ 
+      username: providerName,
+      role: "individual"
+    });
+    console.log("Step 2: Found provider credential:", providerCredential);
 
-    try {
-        const providerCredential = await CredentialModel.findOne({ 
-            username: providerName,
-            role: "individual"
-        });
-        
-        const seekerCredential = await CredentialModel.findOne({ 
-            username: seekerName,
-            role: "requestor"
-        });
+    const seekerCredential = await CredentialModel.findOne({ 
+      username: seekerName,
+      role: "requestor"
+    });
+    console.log("Step 3: Found seeker credential:", seekerCredential);
 
-        if (!providerCredential || !seekerCredential) {
-            return res.status(404).json({ 
-                message: "Provider or Seeker not found or invalid role" 
-            });
-        }
-
-        console.log("step 1 done");
-
-        const providerUser = await UserModel.findOne({ 
-            credential_id: providerCredential._id 
-        });
-        
-        const seekerUser = await RequestorModel.findOne({ 
-            credential_id: seekerCredential._id 
-        });
-
-        if (!providerUser || !seekerUser) {
-            return res.status(404).json({ 
-                message: "User or Requestor records not found" 
-            });
-        }
-
-        console.log("step 2 done");
-
-        const publicUserData = {
-            userId: providerUser._id,
-            firstName: providerUser.first_name,
-            middleName: providerUser.middle_name || "",
-            lastName: providerUser.last_name,
-            email: providerUser.email,
-            mobileNo: providerUser.mobile_no,
-            age: providerUser.age,
-            dateOfBirth: providerUser.date_of_birth,
-            image: "https://plus.unsplash.com/premium_photo-1689568126014-06fea9d5d341?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        };
-
-        console.log("public data prepared");
-
-        const dataItems = await DataItemModel.find({ 
-            item_owner_id: providerUser._id 
-        }, 'item_name _id');
-
-        console.log("step 3 done");
-
-        const validConsentItems = [];
-        const pendingConsentItems = [];
-
-        if (dataItems.length > 0) {
-            const decryptedUserKey = decrypt(providerUser.key, masterKey);
-
-            for (const item of dataItems) {
-                const consent = await ConsentModel.findOne({
-                    item_id: item._id,
-                    seeker_id: seekerUser._id,
-                    provider_id: providerUser._id
-                });
-
-                if (consent && consent.status === "approved" && 
-                    consent.access_count > 0 && 
-                    new Date() <= consent.validity_period) { // Check expiration but don't update status
-                    const encryptedItemId = encrypt(item._id.toString(), decryptedUserKey);
-                    const vaultData = await VaultModel.findOne({ 
-                        encrypted_item_id: encryptedItemId 
-                    });
-
-                    if (vaultData) {
-                        const decryptedValue = decrypt(vaultData.encrypted_item_value, decryptedUserKey);
-                        validConsentItems.push({
-                            itemId: item._id,
-                            itemName: item.item_name,
-                            itemValue: decryptedValue,
-                            accessCount: consent.access_count,
-                            validityPeriod: consent.validity_period,
-                            status: "approved"
-                        });
-                    }
-                } else {
-                    pendingConsentItems.push({
-                        itemId: item._id,
-                        itemName: item.item_name,
-                        status: consent ? consent.status : "no_consent"
-                    });
-                }
-            }
-        }
-
-        console.log("step 4 & 5 done");
-
-        return res.status(200).json({
-            publicData: publicUserData,
-            validItems: validConsentItems,
-            pendingItems: pendingConsentItems,
-            message: "Items and user data processed successfully"
-        });
-
-    } catch (error) {
-        console.error("Error processing consent:", error);
-        console.log("Error processing consent:", error);
-        return res.status(500).json({ 
-            message: "Server error occurred while processing request",
-            error: error.message
-        });
+    if (!providerCredential || !seekerCredential) {
+      console.log("Step 4: Provider or seeker not found or invalid role.");
+      return res.status(404).json({ 
+        message: "Provider or Seeker not found or invalid role" 
+      });
     }
+
+    const providerUser = await UserModel.findOne({ 
+      credential_id: providerCredential._id 
+    });
+    console.log("Step 5: Found provider user:", providerUser);
+
+    const seekerUser = await mongoose.model("Requestor").findOne({ 
+      credential_id: seekerCredential._id 
+    });
+    console.log("Step 6: Found seeker user:", seekerUser);
+
+    if (!providerUser || !seekerUser) {
+      console.log("Step 7: User or requestor records not found.");
+      return res.status(404).json({ 
+        message: "User or Requestor records not found" 
+      });
+    }
+
+    const publicUserData = {
+      userId: providerUser._id,
+      firstName: providerUser.first_name,
+      middleName: providerUser.middle_name || "",
+      lastName: providerUser.last_name,
+      email: providerUser.email,
+      mobileNo: providerUser.mobile_no,
+      age: providerUser.age,
+      dateOfBirth: providerUser.date_of_birth,
+      image: "https://plus.unsplash.com/premium_photo-1689568126014-06fea9d5d341?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+    };
+    console.log("Step 8: Prepared public user data:", publicUserData);
+
+    const dataItems = await DataItemModel.find({ 
+      item_owner_id: providerUser._id 
+    }, 'item_name _id');
+    console.log("Step 9: Found data items:", dataItems);
+
+    const items = dataItems.map(item => ({
+      itemId: item._id,
+      itemName: item.item_name,
+      itemValue: "XXXX",
+      status: null, // Status will be fetched on View click
+      accessCount: null,
+      validityPeriod: null,
+    }));
+    console.log("Step 10: Formatted items:", items);
+
+    console.log("Step 11: Sending response with user data and items.");
+    return res.status(200).json({
+      publicData: publicUserData,
+      items: items,
+      message: "User data and items fetched successfully"
+    });
+
+  } catch (error) {
+    console.error("Step 12: Error processing consent:", error);
+    return res.status(500).json({ 
+      message: "Server error occurred while processing request",
+      error: error.message
+    });
+  }
 };
+
+
 
 userSchema.statics.getUserData = async function (req, res) {
     const { userId } = req.params;
@@ -311,6 +274,10 @@ userSchema.statics.getUserData = async function (req, res) {
         });
     }
 };
+
+
+
+
 
 const UserModel = mongoose.model("User", userSchema);
 

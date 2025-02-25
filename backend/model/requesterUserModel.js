@@ -215,6 +215,35 @@ requestorSchema.statics.login = async function (req, res, next) {
   }
 };
 
+
+requestorSchema.statics.getRequestorData = async function (req, res) {
+  const { userId } = req.params;
+  try {
+    const requestor = await RequestorModel.findById(userId).select('-key -credential_id');
+    if (!requestor) {
+      return res.status(404).json({ message: "Requestor not found" });
+    }
+    return res.status(200).json({
+      name: requestor.name,
+      type: requestor.type,
+      registration_no: requestor.registration_no,
+      email: requestor.email,
+      contact_no: requestor.contact_no,
+      address: requestor.address,
+      created_at: requestor.created_at,
+    });
+  } catch (error) {
+    console.error("Error fetching requestor data:", error);
+    return res.status(500).json({
+      message: "Server error occurred while fetching requestor data",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
 const RequestorModel = mongoose.model("Requestor", requestorSchema);
 
 module.exports = RequestorModel;
